@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Customer Catalogue Scanner</title>
+
+    <!-- QR Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            color: #222;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+
+        #reader {
+            width: 100%;
+        }
+
+        .customer {
+            display: none;
+        }
+
+        .customer-row {
+            margin-bottom: 15px;
+        }
+
+        .label {
+            font-size: 13px;
+            color: #777;
+            margin-bottom: 4px;
+        }
+
+        .value {
+            font-size: 18px;
+            font-weight: bold;
+            word-break: break-word;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .whatsapp {
+            background: #25D366;
+            color: white;
+        }
+
+        .scan-again {
+            background: #222;
+            color: white;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 15px;
+            color: #666;
+        }
+
+        .success {
+            color: #16803c;
+            font-weight: bold;
+        }
+
+        .error {
+            color: #c62828;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>📷 Customer Scanner</h1>
+
+    <p class="subtitle">
+        Scan the customer's QR code
+    </p>
+
+    <!-- Scanner -->
+    <div class="card" id="scannerCard">
+
+        <div id="reader"></div>
+
+        <p id="status" class="status">
+            Point the camera at a customer QR code.
+        </p>
+
+    </div>
+
+    <!-- Customer Information -->
+    <div class="card customer" id="customerCard">
+
+        <h2>Customer Found ✅</h2>
+
+        <div class="customer-row">
+            <div class="label">Name</div>
+            <div class="value" id="customerName"></div>
+        </div>
+
+        <div class="customer-row">
+            <div class="label">Phone</div>
+            <div class="value" id="customerPhone"></div>
+        </div>
+
+        <button class="whatsapp" id="whatsappButton">
+            💬 Send Catalogue on WhatsApp
+        </button>
+
+        <button class="scan-again" id="scanAgainButton">
+            📷 Scan Another Customer
+        </button>
+
+    </div>
+
+</div>
+
+
+<script>
+
+    /*
+     * ==========================================================
+     * CONFIGURATION
+     * ==========================================================
+     *
+     * Later we will put your real catalogue URL here.
+     *
+     * Example:
+     * https://yourusername.github.io/Qr-Scanner-app/catalogue.pdf
+     *
+     */
+
+    const CATALOGUE_URL =
+        "https://yourusername.github.io/Qr-Scanner-app/catalogue.pdf";
+
+
+    let scanner = null;
+
+    let currentCustomer = {
+        name: "",
+        phone: ""
+    };
+
+
+    /*
+     * ==========================================================
+     * START QR SCANNER
+     * ==========================================================
+     */
+
+    function startScanner() {
+
+        document.getElementById("scannerCard").style.display = "block";
+        document.getElementById("customerCard").style.display = "none";
+
+        document.getElementById("status").innerHTML =
+            "Point the camera at a customer QR code.";
+
+        scanner = new Html5Qrcode("reader");
+
+        scanner.start(
+            { facingMode: "environment" },
+
+            {
+                fps: 10,
+                qrbox: {
+                    width: 250,
+                    height: 250
+                }
+            },
+
+            function(decodedText) {
+
+                handleQRCode(decodedText);
+
+            },
+
+            function(errorMessage) {
+
+                // Ignore normal scanning errors.
+                // They happen continuously while the camera is searching.
+
+            }
+        ).catch(function(error) {
+
+            document.getElementById("status").innerHTML =
+                "❌ Camera could not be started. Please allow camera permission.";
+
+            document.getElementById("status").className =
+                "status error";
+
+            console.error(error);
+
+        });
+    }
+
+
+    /*
+     * ==========================================================
+     * QR CODE PROCESSING
+     * ==========================================================
+     *
+     * Supported QR formats:
+     *
+     * 1. JSON:
+     *
+     * {"name":"Rahul Sharma","phone":"919876543210"}
+     *
+     * 2. Simple text:
+     *
+     * NAME=Rahul Sharma
+     * PHONE=919876543210
+     *
+     */
+
+    async function handleQRCode(qrText) {
+
+        try {
+
+            // Stop camera after successful scan
+            if (scanner) {
+                await scanner.stop();
+                scanner.clear();
+                scanner = null;
+            }
+
+            let name = "";
+            let phone = "";
+
+
+            /*
+             * Try JSON first
+             */
+
+            try {
+
+                const data = JSON.parse(qrText);
+
+                name = data.name || data.NAME || "";
+                phone = data.phone || data.PHONE || "";
+
+            } catch (e) {
+
+                /*
+                 * If QR is not JSON,
+                 * try NAME= and PHONE=
+                 */
+
+                const lines = qrText.split(/\r?\n/);
+
+                lines.forEach(function(line) {
+
+                    const parts = line.split("=");
+
+                    if (parts.length >= 2) {
+
+                        const key = parts[0].trim().toUpperCase();
+
+                        const value = parts.slice(1).join("=").trim();
+
+                        if (key === "NAME") {
+                            name = value;
+                        }
+
+                        if (key === "PHONE") {
+                            phone = value;
+                        }
+                    }
+
+                });
+            }
+
+
+            /*
+             * Validate customer information
+             */
+
+            if (!name || !phone) {
+
+                alert(
+                    "QR code does not contain a valid customer name and phone number."
+                );
+
+                startScanner();
+
+                return;
+            }
+
+
+            /*
+             * Clean phone number
+             */
+
+            phone = phone.replace(/\D/g, "");
+
+
+            /*
+             * If Indian number is entered as 9876543210,
+             * automatically add India's country code.
+             */
+
+            if (phone.length === 10) {
+                phone = "91" + phone;
+            }
+
+
+            currentCustomer.name = name;
+            currentCustomer.phone = phone;
+
+
+            /*
+             * Display customer
+             */
+
+            document.getElementById("customerName").textContent =
+                name;
+
+            document.getElementById("customerPhone").textContent =
+                "+" + phone;
+
+
+            document.getElementById("scannerCard").style.display =
+                "none";
+
+            document.getElementById("customerCard").style.display =
+                "block";
+
+        } catch (error) {
+
+            console.error(error);
+
+            alert("Something went wrong while reading the QR code.");
+
+            startScanner();
+        }
+    }
+
+
+    /*
+     * ==========================================================
+     * WHATSAPP BUTTON
+     * ==========================================================
+     */
+
+    document.getElementById("whatsappButton").addEventListener(
+        "click",
+        function() {
+
+            const name = currentCustomer.name;
+            const phone = currentCustomer.phone;
+
+
+            const message =
+                "Hi " + name + " 👋\n\n" +
+                "Thank you for visiting us!\n\n" +
+                "Here is our latest product catalogue:\n\n" +
+                CATALOGUE_URL +
+                "\n\n" +
+                "Please have a look and let us know if you are interested in any products.\n\n" +
+                "Thank you!";
+
+
+            const whatsappURL =
+                "https://wa.me/" +
+                phone +
+                "?text=" +
+                encodeURIComponent(message);
+
+
+            window.open(whatsappURL, "_blank");
+        }
+    );
+
+
+    /*
+     * ==========================================================
+     * SCAN AGAIN
+     * ==========================================================
+     */
+
+    document.getElementById("scanAgainButton").addEventListener(
+        "click",
+        function() {
+
+            startScanner();
+
+        }
+    );
+
+
+    /*
+     * ==========================================================
+     * START
+     * ==========================================================
+     */
+
+    startScanner();
+
+</script>
+
+</body>
+</html>
